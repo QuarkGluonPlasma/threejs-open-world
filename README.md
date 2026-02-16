@@ -1,1 +1,0 @@
-# threejs-open-world
