@@ -44370,6 +44370,9 @@ function setSoundEffectEnabled(enabled) {
     isWalkSoundPlaying = false;
   }
 }
+function getSoundEffectEnabled() {
+  return soundEffectEnabled$1;
+}
 const gltfLoader = new GLTFLoader();
 gltfLoader.load("./Soldier.glb", (gltf) => {
   characterModel = gltf.scene;
@@ -44452,7 +44455,7 @@ const moveSpeed = 10;
 const airControlSpeed = 1.5;
 const jumpForce = 1e3;
 function updatePlayerMovement(deltaTime) {
-  if (!characterModel || isCarView || isComputerView || isTalking) return;
+  if (!characterModel || isCarView || isPlaneView || isComputerView || isTalking) return;
   const physicsVelocity = playerBody.velocity;
   const velocityY = Math.abs(physicsVelocity.y);
   const isOnGround = velocityY < 1;
@@ -44506,7 +44509,7 @@ function updatePlayerMovement(deltaTime) {
       currentAction = idleAction;
     }
   }
-  if (soundEffectEnabled$1 && isMoving && isOnGround && !isCarView && !isComputerView && !isTalking) {
+  if (soundEffectEnabled$1 && isMoving && isOnGround && !isCarView && !isPlaneView && !isComputerView && !isTalking) {
     if (!isWalkSoundPlaying) {
       walkSound.play().catch((err) => {
         console.log("播放走路音效失败:", err);
@@ -44582,6 +44585,10 @@ loadPromise$2.then((gltf) => {
   group$3.add(carModel);
   console.log(gltf);
 });
+const carSound = new Audio(`${"/threejs-open-world/"}开车.mp3`);
+carSound.loop = true;
+carSound.volume = 0.5;
+let isCarSoundPlaying = false;
 const carSpeed = 15;
 const carRotationSpeed = 2;
 const minCameraAngle$1 = MathUtils.degToRad(-20);
@@ -44660,6 +44667,22 @@ function updateCarMovement(deltaTime) {
     carBody.velocity.x = 0;
     carBody.velocity.z = 0;
   }
+  const isMoving = keyPressed$1.w || keyPressed$1.s;
+  const soundEffectEnabled2 = getSoundEffectEnabled();
+  if (soundEffectEnabled2 && isMoving && isCarView) {
+    if (!isCarSoundPlaying) {
+      carSound.play().catch((err) => {
+        console.log("播放开车音效失败:", err);
+      });
+      isCarSoundPlaying = true;
+    }
+  } else {
+    if (isCarSoundPlaying) {
+      carSound.pause();
+      carSound.currentTime = 0;
+      isCarSoundPlaying = false;
+    }
+  }
 }
 function animateCar() {
   requestAnimationFrame(animateCar);
@@ -44675,6 +44698,13 @@ function animateCar() {
   updateCarMovement();
 }
 animateCar();
+function stopCarSound() {
+  if (isCarSoundPlaying) {
+    carSound.pause();
+    carSound.currentTime = 0;
+    isCarSoundPlaying = false;
+  }
+}
 const loader$2 = new GLTFLoader();
 const group$2 = new Group();
 const planeSize = { width: 2, height: 1, depth: 3 };
@@ -44716,6 +44746,10 @@ loadPromise$1.then((gltf) => {
   });
   gltf.scene.position.set(-10, 1.15, 10);
 });
+const planeSound = new Audio(`${"/threejs-open-world/"}开飞机.mp3`);
+planeSound.loop = true;
+planeSound.volume = 0.5;
+let isPlaneSoundPlaying = false;
 const planeSpeed = 15;
 const planeRotationSpeed = 2;
 const minCameraAngle = MathUtils.degToRad(-20);
@@ -44805,6 +44839,22 @@ function updatePlaneMovement(deltaTime) {
     velocityY = 0;
   }
   planeBody.velocity.set(velocityX, velocityY, velocityZ);
+  const isMoving = keyPressed.w || keyPressed.s || keyPressed.space || keyPressed.shift;
+  const soundEffectEnabled2 = getSoundEffectEnabled();
+  if (soundEffectEnabled2 && isMoving && isPlaneView) {
+    if (!isPlaneSoundPlaying) {
+      planeSound.play().catch((err) => {
+        console.log("播放开飞机音效失败:", err);
+      });
+      isPlaneSoundPlaying = true;
+    }
+  } else {
+    if (isPlaneSoundPlaying) {
+      planeSound.pause();
+      planeSound.currentTime = 0;
+      isPlaneSoundPlaying = false;
+    }
+  }
 }
 function animatePlane() {
   requestAnimationFrame(animatePlane);
@@ -44832,6 +44882,13 @@ function animatePlane() {
   updatePlaneMovement();
 }
 animatePlane();
+function stopPlaneSound() {
+  if (isPlaneSoundPlaying) {
+    planeSound.pause();
+    planeSound.currentTime = 0;
+    isPlaneSoundPlaying = false;
+  }
+}
 const loader$1 = new GLTFLoader();
 let css3dObj = null;
 let monitorPosition = null;
@@ -45867,6 +45924,10 @@ document.addEventListener("DOMContentLoaded", () => {
     soundEffectToggle.addEventListener("change", (e) => {
       soundEffectEnabled = e.target.checked;
       setSoundEffectEnabled(soundEffectEnabled);
+      if (!soundEffectEnabled) {
+        stopCarSound();
+        stopPlaneSound();
+      }
     });
   }
   if (miniMapToggle && miniMap) {
@@ -46052,6 +46113,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "x" || event.key === "X") {
     if (isCarView) {
       isCarView = false;
+      stopCarSound();
       if (carModel && characterModel && carBody && playerBody) {
         carModel.remove(camera);
         characterModel.visible = true;
@@ -46093,6 +46155,7 @@ window.addEventListener("keydown", (event) => {
           return;
         }
         isPlaneView = false;
+        stopPlaneSound();
         planeModel.remove(camera);
         characterModel.visible = true;
         const planePosition2 = planeBody.position;
