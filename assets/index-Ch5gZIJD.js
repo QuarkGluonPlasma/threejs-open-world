@@ -37234,6 +37234,29 @@ class CSS3DRenderer {
     }
   }
 }
+let resolveLoadComplete;
+const loadCompletePromise = new Promise((resolve) => {
+  resolveLoadComplete = resolve;
+});
+function updateProgressUI(loaded, total) {
+  const pct = total > 0 ? Math.round(loaded / total * 100) : 0;
+  const progressEl = document.getElementById("loadingProgress");
+  const percentEl = document.getElementById("loadingPercent");
+  if (progressEl) progressEl.style.width = pct + "%";
+  if (percentEl) percentEl.textContent = pct + "%";
+}
+const loadingManager = new LoadingManager(
+  () => {
+    updateProgressUI(100, 100);
+    resolveLoadComplete();
+  },
+  (url, loaded, total) => {
+    updateProgressUI(loaded, total);
+  },
+  (url) => {
+    console.error("加载失败:", url);
+  }
+);
 class Mat3 {
   /**
    * A vector of length 9, containing all matrix elements.
@@ -44373,7 +44396,7 @@ function setSoundEffectEnabled(enabled) {
 function getSoundEffectEnabled() {
   return soundEffectEnabled$1;
 }
-const gltfLoader = new GLTFLoader();
+const gltfLoader = new GLTFLoader(loadingManager);
 gltfLoader.load("./Soldier.glb", (gltf) => {
   characterModel = gltf.scene;
   characterModel.scale.setScalar(0.8);
@@ -44409,6 +44432,7 @@ const keyPressed$2 = {
 };
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
+  if (e.ctrlKey && e.shiftKey && key === "s") return;
   if (key === " ") {
     keyPressed$2.space = true;
   } else if (key in keyPressed$2) {
@@ -44417,6 +44441,10 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("keyup", (e) => {
   const key = e.key.toLowerCase();
+  if (e.ctrlKey && e.shiftKey && key === "s") {
+    keyPressed$2.s = false;
+    return;
+  }
   if (key === " ") {
     keyPressed$2.space = false;
   } else if (key in keyPressed$2) {
@@ -44432,7 +44460,9 @@ document.addEventListener("mousedown", (e) => {
   const settingsPanel = document.getElementById("settingsPanel");
   const settingsBtn = document.getElementById("settingsBtn");
   const fullMap = document.getElementById("fullMap");
-  if (isSettingsOpen || settingsPanel && (settingsPanel.contains(target) || settingsPanel === target) || settingsBtn && (settingsBtn.contains(target) || settingsBtn === target) || fullMap && fullMap.style.display !== "none" && fullMap.contains(target)) {
+  const manualPanel = document.getElementById("manualPanel");
+  const manualBtn = document.getElementById("manualBtn");
+  if (isSettingsOpen || isManualOpen || settingsPanel && (settingsPanel.contains(target) || settingsPanel === target) || settingsBtn && (settingsBtn.contains(target) || settingsBtn === target) || manualPanel && (manualPanel.contains(target) || manualPanel === target) || manualBtn && (manualBtn.contains(target) || manualBtn === target) || fullMap && fullMap.style.display !== "none" && fullMap.contains(target)) {
     return;
   }
   document.body.requestPointerLock();
@@ -44546,7 +44576,15 @@ function animate() {
   }
 }
 animate();
-const loader$3 = new GLTFLoader();
+function setPlayerState({ x, y, z, rotY, vx, vy, vz }) {
+  if (!playerBody) return;
+  playerBody.position.set(x, y, z);
+  playerBody.velocity.set(vx ?? 0, vy ?? 0, vz ?? 0);
+  if (characterModel) {
+    characterModel.rotation.y = rotY ?? 0;
+  }
+}
+const loader$3 = new GLTFLoader(loadingManager);
 const group$3 = new Group();
 const carSize = { width: 2, height: 1.31, depth: 5 };
 const carPosition = { x: 0, y: carSize.height / 2, z: 10 };
@@ -44705,7 +44743,18 @@ function stopCarSound() {
     isCarSoundPlaying = false;
   }
 }
-const loader$2 = new GLTFLoader();
+function setCarState({ x, y, z, qx, qy, qz, qw, vx, vy, vz }) {
+  carBody.position.set(x, y, z);
+  carBody.quaternion.set(qx, qy, qz, qw);
+  carBody.velocity.set(vx ?? 0, vy ?? 0, vz ?? 0);
+  carBody.angularVelocity.set(0, 0, 0);
+  if (carModel) {
+    carModel.position.copy(carBody.position);
+    carModel.position.y -= carSize.height / 2;
+    carModel.quaternion.copy(carBody.quaternion);
+  }
+}
+const loader$2 = new GLTFLoader(loadingManager);
 const group$2 = new Group();
 const planeSize = { width: 2, height: 1, depth: 3 };
 const planePosition = { x: -10, y: 1.15, z: 10 };
@@ -44889,7 +44938,17 @@ function stopPlaneSound() {
     isPlaneSoundPlaying = false;
   }
 }
-const loader$1 = new GLTFLoader();
+function setPlaneState({ x, y, z, qx, qy, qz, qw, vx, vy, vz }) {
+  planeBody.position.set(x, y, z);
+  planeBody.quaternion.set(qx, qy, qz, qw);
+  planeBody.velocity.set(vx ?? 0, vy ?? 0, vz ?? 0);
+  planeBody.angularVelocity.set(0, 0, 0);
+  if (planeModel) {
+    planeModel.position.copy(planeBody.position);
+    planeModel.quaternion.copy(planeBody.quaternion);
+  }
+}
+const loader$1 = new GLTFLoader(loadingManager);
 let css3dObj = null;
 let monitorPosition = null;
 function isNearComputer(characterModel2) {
@@ -45261,7 +45320,13 @@ const hinge = new HingeConstraint(doorFrameBody, doorBody, {
   maxForce: 1e8
 });
 world.addConstraint(hinge);
-const loader = new GLTFLoader();
+function setDoorState({ x, y, z, qx, qy, qz, qw }) {
+  doorBody.position.set(x, y, z);
+  doorBody.quaternion.set(qx, qy, qz, qw);
+  doorBody.velocity.set(0, 0, 0);
+  doorBody.angularVelocity.set(0, 0, 0);
+}
+const loader = new GLTFLoader(loadingManager);
 const group = new Group();
 const personPosition = { x: 5, z: 5 };
 const personRadius = 0.5;
@@ -45749,7 +45814,7 @@ class WeatherSystem {
     }
     this.updateWeatherTip();
   }
-  // 更新天气提示
+  // 更新天气提示（仅显示当前天气）
   updateWeatherTip() {
     const weatherNames = {
       [WeatherType.CLEAR]: "晴天",
@@ -45759,7 +45824,7 @@ class WeatherSystem {
     };
     const tipElement = document.getElementById("weatherTip");
     if (tipElement) {
-      tipElement.textContent = `当前天气: ${weatherNames[this.currentWeather]} | 按数字键切换天气 (1-4)`;
+      tipElement.textContent = weatherNames[this.currentWeather];
     }
   }
   // 更新天气系统（在渲染循环中调用）
@@ -45792,6 +45857,144 @@ function setWeather(weatherType) {
 function updateWeather() {
   if (weatherSystemInstance) {
     weatherSystemInstance.update();
+  }
+}
+const SAVE_KEY = "open-world-save";
+const SAVE_VERSION = 1;
+function getGameState(getters) {
+  const { playerBody: playerBody2, carBody: carBody2, planeBody: planeBody2, doorBody: doorBody2, characterModel: characterModel2 } = getters;
+  const state = {
+    version: SAVE_VERSION,
+    timestamp: Date.now(),
+    player: null,
+    car: null,
+    plane: null,
+    door: null,
+    weather: null,
+    settings: getters.settings ? getters.settings() : null
+  };
+  if (playerBody2) {
+    const pos = playerBody2.position;
+    const vel = playerBody2.velocity;
+    state.player = {
+      x: pos.x,
+      y: pos.y,
+      z: pos.z,
+      rotY: characterModel2 ? characterModel2.rotation.y : 0,
+      vx: vel.x,
+      vy: vel.y,
+      vz: vel.z
+    };
+  }
+  if (carBody2) {
+    const pos = carBody2.position;
+    const quat = carBody2.quaternion;
+    const vel = carBody2.velocity;
+    state.car = {
+      x: pos.x,
+      y: pos.y,
+      z: pos.z,
+      qx: quat.x,
+      qy: quat.y,
+      qz: quat.z,
+      qw: quat.w,
+      vx: vel.x,
+      vy: vel.y,
+      vz: vel.z
+    };
+  }
+  if (planeBody2) {
+    const pos = planeBody2.position;
+    const quat = planeBody2.quaternion;
+    const vel = planeBody2.velocity;
+    state.plane = {
+      x: pos.x,
+      y: pos.y,
+      z: pos.z,
+      qx: quat.x,
+      qy: quat.y,
+      qz: quat.z,
+      qw: quat.w,
+      vx: vel.x,
+      vy: vel.y,
+      vz: vel.z
+    };
+  }
+  if (doorBody2) {
+    const pos = doorBody2.position;
+    const quat = doorBody2.quaternion;
+    state.door = {
+      x: pos.x,
+      y: pos.y,
+      z: pos.z,
+      qx: quat.x,
+      qy: quat.y,
+      qz: quat.z,
+      qw: quat.w
+    };
+  }
+  if (getters.weather) {
+    state.weather = getters.weather();
+  }
+  return state;
+}
+function applyGameState(state, setters) {
+  if (!state || state.version !== SAVE_VERSION) return false;
+  const { setPlayerState: setPlayerState2, setCarState: setCarState2, setPlaneState: setPlaneState2, setDoorState: setDoorState2, setWeather: setWeather2, setSettings } = setters;
+  if (state.player && setPlayerState2) {
+    setPlayerState2(state.player);
+  }
+  if (state.car && setCarState2) {
+    setCarState2(state.car);
+  }
+  if (state.plane && setPlaneState2) {
+    setPlaneState2(state.plane);
+  }
+  if (state.door && setDoorState2) {
+    setDoorState2(state.door);
+  }
+  if (state.weather && setWeather2) {
+    const weatherType = Object.values(WeatherType).includes(state.weather) ? state.weather : WeatherType.CLEAR;
+    setWeather2(weatherType);
+  }
+  if (state.settings && setSettings) {
+    setSettings(state.settings);
+  }
+  return true;
+}
+function saveGame(getters) {
+  try {
+    const state = getGameState(getters);
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    return { success: true, timestamp: state.timestamp };
+  } catch (e) {
+    console.error("存档失败:", e);
+    return { success: false };
+  }
+}
+function loadGame(setters) {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return { success: false, reason: "无存档" };
+    const state = JSON.parse(raw);
+    const ok = applyGameState(state, setters);
+    return { success: ok, timestamp: state.timestamp };
+  } catch (e) {
+    console.error("读档失败:", e);
+    return { success: false, reason: "存档损坏" };
+  }
+}
+function hasSave() {
+  return !!localStorage.getItem(SAVE_KEY);
+}
+function getSaveTimestamp() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const state = JSON.parse(raw);
+    return state.timestamp || null;
+  } catch {
+    return null;
   }
 }
 const scene = new Scene();
@@ -45838,19 +46041,57 @@ function startBackgroundMusic() {
 document.addEventListener("click", startBackgroundMusic, { once: true });
 document.addEventListener("keydown", startBackgroundMusic, { once: true });
 let isSettingsOpen = false;
+let isManualOpen = false;
 let soundEffectEnabled = true;
 let backgroundMusicEnabled = true;
 let miniMapEnabled = true;
+function getSettings() {
+  return { soundEffectEnabled, backgroundMusicEnabled, miniMapEnabled };
+}
+function setSettingsFromSave(s) {
+  if (!s) return;
+  soundEffectEnabled = s.soundEffectEnabled !== false;
+  backgroundMusicEnabled = s.backgroundMusicEnabled !== false;
+  miniMapEnabled = s.miniMapEnabled !== false;
+  setSoundEffectEnabled(soundEffectEnabled);
+  const bgMusicEl = document.getElementById("bgMusicToggle");
+  const soundEl = document.getElementById("soundEffectToggle");
+  const miniMapEl = document.getElementById("miniMapToggle");
+  const miniMapEl2 = document.getElementById("miniMap");
+  if (bgMusicEl) bgMusicEl.checked = backgroundMusicEnabled;
+  if (soundEl) soundEl.checked = soundEffectEnabled;
+  if (miniMapEl) miniMapEl.checked = miniMapEnabled;
+  if (miniMapEl2) miniMapEl2.style.display = miniMapEnabled ? "flex" : "none";
+  if (!backgroundMusicEnabled && musicStarted) backgroundMusic.pause();
+  else if (backgroundMusicEnabled && musicStarted) backgroundMusic.play().catch(() => {
+  });
+}
 function toggleSettings() {
   const settingsPanel = document.getElementById("settingsPanel");
   if (!settingsPanel) return;
   isSettingsOpen = !isSettingsOpen;
   settingsPanel.style.display = isSettingsOpen ? "flex" : "none";
+  if (isSettingsOpen) {
+    const statusEl = document.getElementById("saveStatus");
+    if (statusEl && !statusEl.textContent) {
+      const ts = getSaveTimestamp();
+      statusEl.textContent = ts ? `上次存档: ${new Date(ts).toLocaleString("zh-CN")}` : "暂无存档";
+    }
+  }
   if (isSettingsOpen && document.pointerLockElement) {
     document.exitPointerLock();
   }
   if (isSettingsOpen) {
     updateWeatherButtonStates();
+  }
+}
+function toggleManual() {
+  const manualPanel = document.getElementById("manualPanel");
+  if (!manualPanel) return;
+  isManualOpen = !isManualOpen;
+  manualPanel.style.display = isManualOpen ? "flex" : "none";
+  if (isManualOpen && document.pointerLockElement) {
+    document.exitPointerLock();
   }
 }
 function updateWeatherButtonStates() {
@@ -45878,6 +46119,136 @@ function updateWeatherButtonStates() {
     }
     btn.classList.toggle("active", weatherType === currentWeather);
   });
+}
+function forceExitToPlayer() {
+  if (isComputerView) {
+    isComputerView = false;
+    exitComputerView(camera, characterModel);
+  }
+  if (isCarView) {
+    isCarView = false;
+    stopCarSound();
+    if (carModel && characterModel && carBody && playerBody) {
+      carModel.remove(camera);
+      characterModel.visible = true;
+      const carPosition2 = carBody.position;
+      const forward = new Vector3();
+      carModel.getWorldDirection(forward);
+      forward.y = 0;
+      forward.normalize();
+      const left = new Vector3(forward.z, 0, -forward.x);
+      const leftOffset = 2;
+      playerBody.position.set(
+        carPosition2.x + left.x * leftOffset,
+        playerHeight / 2,
+        carPosition2.z + left.z * leftOffset
+      );
+      playerBody.velocity.set(0, 0, 0);
+      characterModel.position.copy(playerBody.position);
+      characterModel.position.y -= playerHeight / 2;
+      characterModel.rotation.y = carModel.rotation.y;
+      characterModel.add(camera);
+      camera.position.set(0, 1.5, 2.5);
+      camera.rotation.set(0, 0, 0);
+      camera.up.set(0, 1, 0);
+    }
+  }
+  if (isPlaneView) {
+    isPlaneView = false;
+    stopPlaneSound();
+    if (planeModel && characterModel && planeBody && playerBody) {
+      planeModel.remove(camera);
+      characterModel.visible = true;
+      const planePosition2 = planeBody.position;
+      const forward = new Vector3();
+      planeModel.getWorldDirection(forward);
+      forward.y = 0;
+      forward.normalize();
+      const left = new Vector3(forward.z, 0, -forward.x);
+      const leftOffset = 2;
+      playerBody.position.set(
+        planePosition2.x + left.x * leftOffset,
+        playerHeight / 2,
+        planePosition2.z + left.z * leftOffset
+      );
+      playerBody.velocity.set(0, 0, 0);
+      characterModel.position.copy(playerBody.position);
+      characterModel.position.y -= playerHeight / 2;
+      characterModel.rotation.y = planeModel.rotation.y;
+      characterModel.add(camera);
+      camera.position.set(0, 1.5, 2.5);
+      camera.rotation.set(0, 0, 0);
+      camera.up.set(0, 1, 0);
+    }
+  }
+  isTalking = false;
+  dialogueIndex = 0;
+}
+function doSave() {
+  if (isCarView || isPlaneView || isComputerView) {
+    showSaveStatus("请先下车/下飞机/退出电脑后再存档", "warning");
+    return;
+  }
+  if (!confirm("确定要存档吗？")) return;
+  const getters = {
+    playerBody,
+    carBody,
+    planeBody,
+    doorBody,
+    characterModel,
+    weather: () => getWeatherSystem()?.getCurrentWeather(),
+    settings: getSettings
+  };
+  const result = saveGame(getters);
+  if (result.success) {
+    const time = new Date(result.timestamp).toLocaleString("zh-CN");
+    showSaveStatus(`存档成功 (${time})`, "success");
+  } else {
+    showSaveStatus("存档失败", "error");
+  }
+}
+function doLoad() {
+  if (!hasSave()) {
+    showSaveStatus("暂无存档", "error");
+    return;
+  }
+  if (!confirm("确定要读档吗？当前进度将被覆盖。")) return;
+  forceExitToPlayer();
+  const setters = {
+    setPlayerState,
+    setCarState,
+    setPlaneState,
+    setDoorState,
+    setWeather,
+    setSettings: setSettingsFromSave
+  };
+  const result = loadGame(setters);
+  if (result.success) {
+    if (isSettingsOpen) updateWeatherButtonStates();
+    const time = result.timestamp ? new Date(result.timestamp).toLocaleString("zh-CN") : "";
+    showSaveStatus(`读档成功 (存档于 ${time})`, "success");
+  } else {
+    showSaveStatus(result.reason || "读档失败", "error");
+  }
+}
+function showSaveStatus(msg, type = "info") {
+  const statusEl = document.getElementById("saveStatus");
+  if (statusEl) {
+    statusEl.textContent = msg;
+    statusEl.className = "save-status save-status-" + (type || "info");
+    if (msg) setTimeout(() => {
+      statusEl.textContent = "";
+    }, 3e3);
+  }
+  const toast = document.getElementById("saveLoadToast");
+  if (toast && msg) {
+    toast.textContent = msg;
+    toast.className = "save-load-toast show " + (type || "info");
+    clearTimeout(showSaveStatus._toastTimer);
+    showSaveStatus._toastTimer = setTimeout(() => {
+      toast.classList.remove("show");
+    }, 2500);
+  }
 }
 document.addEventListener("DOMContentLoaded", () => {
   const settingsBtn = document.getElementById("settingsBtn");
@@ -45936,6 +46307,29 @@ document.addEventListener("DOMContentLoaded", () => {
       miniMapEnabled = e.target.checked;
       miniMap.style.display = miniMapEnabled ? "flex" : "none";
     });
+  }
+  const saveBtn = document.getElementById("saveGameBtn");
+  const loadBtn = document.getElementById("loadGameBtn");
+  if (saveBtn) saveBtn.addEventListener("click", () => {
+    doSave();
+  });
+  if (loadBtn) loadBtn.addEventListener("click", () => {
+    doLoad();
+  });
+  const manualBtn = document.getElementById("manualBtn");
+  const closeManualBtn = document.getElementById("closeManualBtn");
+  const manualPanel = document.getElementById("manualPanel");
+  if (manualBtn) manualBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleManual();
+  });
+  if (closeManualBtn) closeManualBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleManual();
+  });
+  if (manualPanel) {
+    manualPanel.addEventListener("mousedown", (e) => e.stopPropagation());
+    manualPanel.addEventListener("click", (e) => e.stopPropagation());
   }
   weatherButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -46021,20 +46415,14 @@ function updateViewTip() {
   const tipElement = document.getElementById("viewTip");
   if (!tipElement) return;
   if (isComputerView) {
-    tipElement.textContent = "按 E 退出电脑";
+    tipElement.textContent = "按 E 退出";
   } else if (isCarView) {
     tipElement.textContent = "按 X 下车";
   } else if (isPlaneView) {
-    if (planeBody) {
-      const planeHeight = planeBody.position.y;
-      const groundHeight = 1.15;
-      if (planeHeight > groundHeight + 1) {
-        tipElement.textContent = "空格键上升 | Shift键下降 | 请先降落再按 C 下飞机";
-      } else {
-        tipElement.textContent = "空格键上升 | Shift键下降 | 按 C 下飞机";
-      }
+    if (planeBody && planeBody.position.y > 2.15) {
+      tipElement.textContent = "空格上升 Shift下降 · 先降落再按 C 下飞机";
     } else {
-      tipElement.textContent = "按 C 下飞机";
+      tipElement.textContent = "空格上升 Shift下降 · 按 C 下飞机";
     }
   } else if (isNearCar()) {
     tipElement.textContent = "按 X 上车";
@@ -46042,19 +46430,16 @@ function updateViewTip() {
     tipElement.textContent = "按 C 上飞机";
   } else if (isNearPerson()) {
     if (isTalking) {
-      if (dialogueIndex < dialogueData.length) {
-        tipElement.textContent = "按 H 键继续对话 | 按 K 键结束对话";
-      } else {
-        tipElement.textContent = "对话结束，按 H 键重新开始 | 按 K 键结束对话";
-      }
+      tipElement.textContent = dialogueIndex < dialogueData.length ? "按 H 继续 按 K 结束" : "按 H 重新开始 按 K 结束";
     } else {
-      tipElement.textContent = "按 H 键开始对话";
+      tipElement.textContent = "按 H 对话";
     }
   } else if (isNearComputer(characterModel)) {
-    tipElement.textContent = "按 E 打电脑";
+    tipElement.textContent = "按 E 使用电脑";
   } else {
-    tipElement.textContent = "靠近车辆按 X 上车 | 靠近飞机按 C 上飞机 | 靠近电脑按 E 打电脑 | 按 M 打开地图";
+    tipElement.textContent = "";
   }
+  tipElement.style.display = tipElement.textContent ? "block" : "none";
 }
 function updateDialogs() {
   const personDialog = document.getElementById("personDialog");
@@ -46099,7 +46484,11 @@ function render() {
   updateWeather();
   requestAnimationFrame(render);
 }
-render();
+loadCompletePromise.then(() => {
+  const overlay = document.getElementById("loadingOverlay");
+  if (overlay) overlay.classList.add("hidden");
+  render();
+});
 window.addEventListener("resize", () => {
   const width2 = window.innerWidth;
   const height2 = window.innerHeight;
@@ -46229,13 +46618,18 @@ window.addEventListener("keydown", (event) => {
   } else if (event.key === "4") {
     setWeather(WeatherType.FOG);
     if (isSettingsOpen) updateWeatherButtonStates();
+  } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    doSave();
+  } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "l") {
+    event.preventDefault();
+    doLoad();
+  } else if (event.key === "?" || event.key === "？") {
+    toggleManual();
   } else if (event.key === "p" || event.key === "P") {
-    if (!isComputerView) {
-      toggleSettings();
-    }
+    if (!isComputerView) toggleSettings();
   } else if (event.key === "Escape") {
-    if (isSettingsOpen) {
-      toggleSettings();
-    }
+    if (isManualOpen) toggleManual();
+    else if (isSettingsOpen) toggleSettings();
   }
 });
